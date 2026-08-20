@@ -24,7 +24,7 @@ This builds a release binary and installs `~/Applications/CursorUsageBar.app`, t
 
 | UI | Meaning |
 | --- | --- |
-| Ring + `61%` | Total included usage used this billing cycle |
+| Compact ring + `61%` (single glyph, minimal pad) | Total included usage used this billing cycle |
 | Auto / Composer | Included Auto + Composer pool |
 | API / Other models | Included named/API model pool |
 | On-demand | Pay-as-you-go bucket (if enabled) |

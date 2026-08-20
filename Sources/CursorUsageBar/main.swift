@@ -45,10 +45,12 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     super.init()
 
     if let button = statusItem.button {
-      button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-      button.imagePosition = .imageLeading
-      button.title = "…"
-      button.image = StatusArtwork.ring(percent: nil)
+      // One composite template image (ring + digits). Avoids NSStatusBarButton's
+      // default image/title bezel padding that makes the item look wide.
+      button.title = ""
+      button.imagePosition = .imageOnly
+      button.imageHugsTitle = true
+      button.image = StatusArtwork.badge(percent: nil)
       button.toolTip = "Cursor usage"
     }
 
@@ -139,8 +141,8 @@ final class UsageBarController: NSObject, NSMenuDelegate {
       } catch {
         DispatchQueue.main.async {
           if let button = self.statusItem.button {
-            button.title = "!"
-            button.image = StatusArtwork.ring(percent: nil)
+            button.title = ""
+            button.image = StatusArtwork.badge(percent: nil, overrideText: "!")
             button.toolTip = error.localizedDescription
           }
           self.errorItem.title = error.localizedDescription
@@ -153,10 +155,11 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private func apply(_ summary: UsageSummary) {
     let total = summary.totalPercent
     if let button = statusItem.button {
-      // Compact: ring + "61%" (no "C " prefix). Details live in the menu/tooltip.
-      button.image = StatusArtwork.ring(percent: total)
-      button.title = String(format: "%.0f%%", total)
+      button.title = ""
+      button.image = StatusArtwork.badge(percent: total)
       button.toolTip = summary.totalMessage
+      // Hug content width; system still adds a tiny hit-target pad we can't remove.
+      statusItem.length = button.image?.size.width ?? NSStatusItem.variableLength
     }
 
     messageItem.title = summary.totalMessage
@@ -186,43 +189,74 @@ final class UsageBarController: NSObject, NSMenuDelegate {
 }
 
 enum StatusArtwork {
-  /// 16pt template ring. `percent` nil → empty track only.
-  static func ring(percent: Double?) -> NSImage {
-    let size = NSSize(width: 16, height: 16)
-    let image = NSImage(size: size, flipped: false) { rect in
-      let inset: CGFloat = 2
-      let track = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
-      track.lineWidth = 2
-      NSColor.labelColor.withAlphaComponent(0.22).setStroke()
+  /// Tight ring + percent as a single template image (no extra image/title gap).
+  static func badge(percent: Double?, overrideText: String? = nil) -> NSImage {
+    let text: String = {
+      if let overrideText { return overrideText }
+      if let percent { return String(format: "%.0f%%", percent) }
+      return "…"
+    }()
+
+    let font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+    let attrs: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: NSColor.black
+    ]
+    let textSize = (text as NSString).size(withAttributes: attrs)
+
+    let ring: CGFloat = 11
+    let gap: CGFloat = 2
+    let padX: CGFloat = 0
+    let height: CGFloat = 16
+    let width = max(ceil(padX + ring + gap + textSize.width + padX), ring)
+
+    let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+      let ringRect = NSRect(
+        x: padX,
+        y: (rect.height - ring) / 2,
+        width: ring,
+        height: ring
+      )
+      let inset: CGFloat = 1.25
+      let track = NSBezierPath(ovalIn: ringRect.insetBy(dx: inset, dy: inset))
+      track.lineWidth = 1.75
+      NSColor.black.withAlphaComponent(0.25).setStroke()
       track.stroke()
 
-      guard let percent else { return true }
-      let clamped = min(max(percent, 0), 100) / 100
-      if clamped <= 0 { return true }
+      if let percent {
+        let clamped = min(max(percent, 0), 100) / 100
+        if clamped > 0 {
+          let center = NSPoint(x: ringRect.midX, y: ringRect.midY)
+          let radius = (ring / 2) - inset
+          let start: CGFloat = 90
+          let end = start - (360 * CGFloat(clamped))
+          let arc = NSBezierPath()
+          arc.lineWidth = 1.75
+          arc.lineCapStyle = .round
+          arc.appendArc(
+            withCenter: center,
+            radius: radius,
+            startAngle: start,
+            endAngle: end,
+            clockwise: true
+          )
+          NSColor.black.setStroke()
+          arc.stroke()
+        }
+      }
 
-      let center = NSPoint(x: rect.midX, y: rect.midY)
-      let radius = (min(rect.width, rect.height) / 2) - inset
-      // AppKit angles: degrees, 0° = 3 o'clock, positive = counter-clockwise.
-      let start: CGFloat = 90
-      let end = start - (360 * CGFloat(clamped))
-      let arc = NSBezierPath()
-      arc.lineWidth = 2
-      arc.lineCapStyle = .round
-      arc.appendArc(
-        withCenter: center,
-        radius: radius,
-        startAngle: start,
-        endAngle: end,
-        clockwise: true
+      let textOrigin = NSPoint(
+        x: padX + ring + gap,
+        y: (rect.height - textSize.height) / 2 - 0.5
       )
-      NSColor.labelColor.setStroke()
-      arc.stroke()
+      (text as NSString).draw(at: textOrigin, withAttributes: attrs)
       return true
     }
     image.isTemplate = true
     return image
   }
 }
+
 
 struct UsageSummary {
   var membershipType: String
