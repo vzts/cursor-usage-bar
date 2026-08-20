@@ -47,9 +47,6 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     if let button = statusItem.button {
       button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
       button.imagePosition = .imageLeading
-      // Pack image+title as one unit so leftover bezel space is not added
-      // between the glyph and the trailing edge (outer ends stay system-minimal).
-      button.imageHugsTitle = true
       button.title = "…"
       button.image = StatusArtwork.ring(percent: nil)
       button.toolTip = "Cursor usage"
@@ -142,10 +139,9 @@ final class UsageBarController: NSObject, NSMenuDelegate {
       } catch {
         DispatchQueue.main.async {
           if let button = self.statusItem.button {
-            button.image = StatusArtwork.ring(percent: nil)
             button.title = "!"
+            button.image = StatusArtwork.ring(percent: nil)
             button.toolTip = error.localizedDescription
-            self.fitStatusItemWidth()
           }
           self.errorItem.title = error.localizedDescription
           self.errorItem.isHidden = false
@@ -154,23 +150,13 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     }
   }
 
-
-  /// Trim outer status-item width to content. macOS still keeps a small hit-target
-  /// inset we cannot fully remove; this only avoids extra empty bezel on the ends.
-  private func fitStatusItemWidth() {
-    guard let button = statusItem.button else { return }
-    button.sizeToFit()
-    let width = ceil(button.fittingSize.width)
-    statusItem.length = max(width, 1)
-  }
-
   private func apply(_ summary: UsageSummary) {
     let total = summary.totalPercent
     if let button = statusItem.button {
+      // Compact: ring + "61%" (no "C " prefix). Details live in the menu/tooltip.
       button.image = StatusArtwork.ring(percent: total)
       button.title = String(format: "%.0f%%", total)
       button.toolTip = summary.totalMessage
-      fitStatusItemWidth()
     }
 
     messageItem.title = summary.totalMessage
@@ -200,14 +186,14 @@ final class UsageBarController: NSObject, NSMenuDelegate {
 }
 
 enum StatusArtwork {
-  /// 16pt template ring. Gap to the title is left to NSButton (felt right before).
+  /// 16pt template ring. `percent` nil → empty track only.
   static func ring(percent: Double?) -> NSImage {
     let size = NSSize(width: 16, height: 16)
     let image = NSImage(size: size, flipped: false) { rect in
       let inset: CGFloat = 2
       let track = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
       track.lineWidth = 2
-      NSColor.black.withAlphaComponent(0.22).setStroke()
+      NSColor.labelColor.withAlphaComponent(0.22).setStroke()
       track.stroke()
 
       guard let percent else { return true }
@@ -216,6 +202,7 @@ enum StatusArtwork {
 
       let center = NSPoint(x: rect.midX, y: rect.midY)
       let radius = (min(rect.width, rect.height) / 2) - inset
+      // AppKit angles: degrees, 0° = 3 o'clock, positive = counter-clockwise.
       let start: CGFloat = 90
       let end = start - (360 * CGFloat(clamped))
       let arc = NSBezierPath()
@@ -228,7 +215,7 @@ enum StatusArtwork {
         endAngle: end,
         clockwise: true
       )
-      NSColor.black.setStroke()
+      NSColor.labelColor.setStroke()
       arc.stroke()
       return true
     }
@@ -236,7 +223,6 @@ enum StatusArtwork {
     return image
   }
 }
-
 
 struct UsageSummary {
   var membershipType: String
