@@ -41,14 +41,13 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private let errorItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
   private override init() {
-    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
 
     if let button = statusItem.button {
       button.imagePosition = .imageOnly
       button.title = ""
-      button.image = StatusArtwork.ring(percent: nil)
-      button.toolTip = "Cursor usage"
+      applyStatusImage(StatusArtwork.ring(percent: nil), tooltip: "Cursor usage")
     }
 
     for item in [messageItem, autoItem, apiItem, onDemandItem, planItem, cycleItem, errorItem] {
@@ -137,11 +136,10 @@ final class UsageBarController: NSObject, NSMenuDelegate {
         }
       } catch {
         DispatchQueue.main.async {
-          if let button = self.statusItem.button {
-            button.title = ""
-            button.image = StatusArtwork.ring(percent: nil)
-            button.toolTip = error.localizedDescription
-          }
+          self.applyStatusImage(
+            StatusArtwork.ring(percent: nil),
+            tooltip: error.localizedDescription
+          )
           self.errorItem.title = error.localizedDescription
           self.errorItem.isHidden = false
         }
@@ -149,14 +147,19 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     }
   }
 
+  private func applyStatusImage(_ image: NSImage, tooltip: String) {
+    guard let button = statusItem.button else { return }
+    button.title = ""
+    button.image = image
+    button.toolTip = tooltip
+    // Width = glyph only; avoid squareLength empty side space.
+    statusItem.length = image.size.width
+  }
+
   private func apply(_ summary: UsageSummary) {
     let total = summary.totalPercent
-    if let button = statusItem.button {
-      // Menu bar: ring only. Exact % lives in the menu / tooltip.
-      button.title = ""
-      button.image = StatusArtwork.ring(percent: total)
-      button.toolTip = summary.totalMessage
-    }
+    // Menu bar: ring only. Exact % lives in the menu / tooltip.
+    applyStatusImage(StatusArtwork.ring(percent: total), tooltip: summary.totalMessage)
 
     messageItem.title = summary.totalMessage
     autoItem.title = String(format: "Auto / Composer: %.0f%%", summary.autoPercent)
@@ -185,13 +188,14 @@ final class UsageBarController: NSObject, NSMenuDelegate {
 }
 
 enum StatusArtwork {
-  /// 16pt template ring. `percent` nil → empty track only.
+  /// Tight template ring. `percent` nil → empty track only.
   static func ring(percent: Double?) -> NSImage {
-    let size = NSSize(width: 16, height: 16)
+    // No transparent side pad beyond the stroke.
+    let size = NSSize(width: 14, height: 14)
     let image = NSImage(size: size, flipped: false) { rect in
-      let inset: CGFloat = 2
+      let inset: CGFloat = 1
       let track = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
-      track.lineWidth = 2
+      track.lineWidth = 1.75
       NSColor.labelColor.withAlphaComponent(0.22).setStroke()
       track.stroke()
 
@@ -205,7 +209,7 @@ enum StatusArtwork {
       let start: CGFloat = 90
       let end = start - (360 * CGFloat(clamped))
       let arc = NSBezierPath()
-      arc.lineWidth = 2
+      arc.lineWidth = 1.75
       arc.lineCapStyle = .round
       arc.appendArc(
         withCenter: center,
@@ -222,6 +226,7 @@ enum StatusArtwork {
     return image
   }
 }
+
 
 struct UsageSummary {
   var membershipType: String
