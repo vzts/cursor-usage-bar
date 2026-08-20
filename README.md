@@ -30,15 +30,16 @@ This builds a release binary and installs `~/Applications/CursorUsageBar.app`, t
 | On-demand | Pay-as-you-go bucket (if enabled) |
 | Plan / Resets | Membership + billing cycle end |
 
-### Refresh cadence
+### Refresh cadence (adaptive)
 
 | When | Interval |
 | --- | --- |
-| Background | every **2 minutes** |
+| Menu opened in the last 5 minutes | every **1 minute** |
+| Idle | every **5 minutes** |
 | Menu open | immediate refresh |
 | Manual | **Refresh** (`r`) |
 
-**Why 2 minutes?** Similar tools land around 1–5 minutes (ClaudeBar floor 1 min; CursorBar often 5 min; SessionWatcher ~90s). Sub-minute polling is usually wasted against Cursor’s dashboard API lag and costs battery/network for little gain. Opening the menu always pulls a fresh snapshot.
+This follows common menu-bar tracker practice: ClaudeBar’s **1-minute floor** while you’re looking, CursorBar’s **5-minute** idle poll for the same Cursor usage API, plus SessionWatcher-style refresh-on-open. Sub-minute polling rarely beats dashboard lag and wastes battery/network.
 
 ## How it works
 

@@ -2,9 +2,15 @@ import AppKit
 import Foundation
 import SQLite3
 
-/// Background poll interval. Floor used by ClaudeBar/CodexBar-style trackers is ~1 min;
-/// 2 min balances freshness vs hitting Cursor's undocumented usage API.
-private let refreshIntervalSeconds: TimeInterval = 120
+/// Refresh policy aligned with ClaudeBar/CodexBar/SessionWatcher practice:
+/// - 1 minute floor while recently interacting (menu opened)
+/// - 5 minutes when idle (same default CursorBar uses for this API)
+/// - always refresh immediately when the menu opens
+private enum RefreshPolicy {
+  static let active: TimeInterval = 60
+  static let idle: TimeInterval = 300
+  static let recentInteraction: TimeInterval = 5 * 60
+}
 
 @main
 enum CursorUsageBarMain {
@@ -24,6 +30,7 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private var refreshTimer: Timer?
   private var lastSummary: UsageSummary?
   private var isRefreshing = false
+  private var lastMenuOpenAt: Date?
 
   private let autoItem = NSMenuItem(title: "Auto: —", action: nil, keyEquivalent: "")
   private let apiItem = NSMenuItem(title: "API: —", action: nil, keyEquivalent: "")
@@ -78,14 +85,31 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     statusItem.menu = menu
 
     refreshNow()
-    refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshIntervalSeconds, repeats: true) { [weak self] _ in
-      self?.refreshNow()
-    }
+    scheduleRefreshTimer()
   }
 
   func menuWillOpen(_ menu: NSMenu) {
-    // SessionWatcher-style: refresh when the user looks.
+    lastMenuOpenAt = Date()
     refreshNow()
+    scheduleRefreshTimer()
+  }
+
+  private func currentRefreshInterval() -> TimeInterval {
+    if let lastMenuOpenAt,
+       Date().timeIntervalSince(lastMenuOpenAt) < RefreshPolicy.recentInteraction {
+      return RefreshPolicy.active
+    }
+    return RefreshPolicy.idle
+  }
+
+  private func scheduleRefreshTimer() {
+    refreshTimer?.invalidate()
+    let interval = currentRefreshInterval()
+    refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+      guard let self else { return }
+      self.refreshNow()
+      self.scheduleRefreshTimer()
+    }
   }
 
   @objc private func quitApp() {
