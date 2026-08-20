@@ -2,7 +2,7 @@
 
 Minimal macOS menu bar app that shows your **Cursor** plan usage at a glance.
 
-Menu bar shows a **compact usage ring** filled by Cursor’s **total included usage %** (`totalPercentUsed`) — the same idea as *“You've used X% of your included total usage”* — not the misleading `used/limit` counters some trackers treat as 100%.
+Menu bar shows a **16×16pt template usage ring** in a standard `squareLength` slot (same rhythm as Amphetamine / system status icons) filled by Cursor’s **total included usage %** (`totalPercentUsed`) — the same idea as *“You've used X% of your included total usage”* — not the misleading `used/limit` counters some trackers treat as 100%.
 
 ## Requirements
 

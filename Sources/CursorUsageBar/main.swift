@@ -41,7 +41,7 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private let errorItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
   private override init() {
-    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     super.init()
 
     if let button = statusItem.button {
@@ -150,10 +150,10 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private func applyStatusImage(_ image: NSImage, tooltip: String) {
     guard let button = statusItem.button else { return }
     button.title = ""
+    button.imagePosition = .imageOnly
+    button.imageScaling = .scaleProportionallyDown
     button.image = image
     button.toolTip = tooltip
-    // Width = glyph only; avoid squareLength empty side space.
-    statusItem.length = image.size.width
   }
 
   private func apply(_ summary: UsageSummary) {
@@ -188,15 +188,16 @@ final class UsageBarController: NSObject, NSMenuDelegate {
 }
 
 enum StatusArtwork {
-  /// Tight template ring. `percent` nil → empty track only.
+  /// Standard menu-bar glyph: 16×16pt template, like Amphetamine / system status icons.
+  /// `squareLength` (~22pt) provides the shared side rhythm next to other items.
   static func ring(percent: Double?) -> NSImage {
-    // No transparent side pad beyond the stroke.
-    let size = NSSize(width: 14, height: 14)
+    let size = NSSize(width: 16, height: 16)
     let image = NSImage(size: size, flipped: false) { rect in
-      let inset: CGFloat = 1
+      // Keep stroke inside the 16pt canvas; matches typical status-icon optical size.
+      let inset: CGFloat = 2
       let track = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
-      track.lineWidth = 1.75
-      NSColor.labelColor.withAlphaComponent(0.22).setStroke()
+      track.lineWidth = 1.5
+      NSColor.labelColor.withAlphaComponent(0.25).setStroke()
       track.stroke()
 
       guard let percent else { return true }
@@ -205,11 +206,10 @@ enum StatusArtwork {
 
       let center = NSPoint(x: rect.midX, y: rect.midY)
       let radius = (min(rect.width, rect.height) / 2) - inset
-      // AppKit angles: degrees, 0° = 3 o'clock, positive = counter-clockwise.
       let start: CGFloat = 90
       let end = start - (360 * CGFloat(clamped))
       let arc = NSBezierPath()
-      arc.lineWidth = 1.75
+      arc.lineWidth = 1.5
       arc.lineCapStyle = .round
       arc.appendArc(
         withCenter: center,
