@@ -2,7 +2,7 @@
 
 Minimal macOS menu bar app that shows your **Cursor** plan usage at a glance.
 
-Menu bar shows a **compact ring + `61%`** using Cursor’s **total included usage %** (`totalPercentUsed`) — the same idea as *“You've used X% of your included total usage”* — not the misleading `used/limit` counters some trackers treat as 100%.
+Menu bar shows a **compact usage ring** filled by Cursor’s **total included usage %** (`totalPercentUsed`) — the same idea as *“You've used X% of your included total usage”* — not the misleading `used/limit` counters some trackers treat as 100%.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ This builds a release binary and installs `~/Applications/CursorUsageBar.app`, t
 
 | UI | Meaning |
 | --- | --- |
-| Ring + `61%` | Total included usage used this billing cycle |
+| Ring fill | Total included usage used this billing cycle (open menu for exact %) |
 | Auto / Composer | Included Auto + Composer pool |
 | API / Other models | Included named/API model pool |
 | On-demand | Pay-as-you-go bucket (if enabled) |

@@ -41,13 +41,12 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private let errorItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
   private override init() {
-    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     super.init()
 
     if let button = statusItem.button {
-      button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-      button.imagePosition = .imageLeading
-      button.title = "…"
+      button.imagePosition = .imageOnly
+      button.title = ""
       button.image = StatusArtwork.ring(percent: nil)
       button.toolTip = "Cursor usage"
     }
@@ -139,7 +138,7 @@ final class UsageBarController: NSObject, NSMenuDelegate {
       } catch {
         DispatchQueue.main.async {
           if let button = self.statusItem.button {
-            button.title = "!"
+            button.title = ""
             button.image = StatusArtwork.ring(percent: nil)
             button.toolTip = error.localizedDescription
           }
@@ -153,9 +152,9 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private func apply(_ summary: UsageSummary) {
     let total = summary.totalPercent
     if let button = statusItem.button {
-      // Compact: ring + "61%" (no "C " prefix). Details live in the menu/tooltip.
+      // Menu bar: ring only. Exact % lives in the menu / tooltip.
+      button.title = ""
       button.image = StatusArtwork.ring(percent: total)
-      button.title = String(format: "%.0f%%", total)
       button.toolTip = summary.totalMessage
     }
 
