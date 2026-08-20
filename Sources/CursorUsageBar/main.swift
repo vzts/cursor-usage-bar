@@ -2,6 +2,10 @@ import AppKit
 import Foundation
 import SQLite3
 
+/// Background poll interval. Floor used by ClaudeBar/CodexBar-style trackers is ~1 min;
+/// 2 min balances freshness vs hitting Cursor's undocumented usage API.
+private let refreshIntervalSeconds: TimeInterval = 120
+
 @main
 enum CursorUsageBarMain {
   static func main() {
@@ -12,13 +16,14 @@ enum CursorUsageBarMain {
   }
 }
 
-final class UsageBarController: NSObject {
+final class UsageBarController: NSObject, NSMenuDelegate {
   static let shared = UsageBarController()
 
   private let statusItem: NSStatusItem
   private let menu = NSMenu()
   private var refreshTimer: Timer?
   private var lastSummary: UsageSummary?
+  private var isRefreshing = false
 
   private let autoItem = NSMenuItem(title: "Auto: —", action: nil, keyEquivalent: "")
   private let apiItem = NSMenuItem(title: "API: —", action: nil, keyEquivalent: "")
@@ -33,19 +38,19 @@ final class UsageBarController: NSObject {
     super.init()
 
     if let button = statusItem.button {
-      button.title = "C …"
+      button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+      button.imagePosition = .imageLeading
+      button.title = "…"
+      button.image = StatusArtwork.ring(percent: nil)
       button.toolTip = "Cursor usage"
     }
 
-    messageItem.isEnabled = false
-    autoItem.isEnabled = false
-    apiItem.isEnabled = false
-    onDemandItem.isEnabled = false
-    planItem.isEnabled = false
-    cycleItem.isEnabled = false
-    errorItem.isEnabled = false
+    for item in [messageItem, autoItem, apiItem, onDemandItem, planItem, cycleItem, errorItem] {
+      item.isEnabled = false
+    }
     errorItem.isHidden = true
 
+    menu.delegate = self
     menu.addItem(messageItem)
     menu.addItem(.separator())
     menu.addItem(autoItem)
@@ -66,16 +71,21 @@ final class UsageBarController: NSObject {
     menu.addItem(dashboard)
 
     menu.addItem(.separator())
-    let quit = NSMenuItem(title: "Quit CursorUsageBar", action: #selector(quitApp), keyEquivalent: "q")
+    let quit = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q")
     quit.target = self
     menu.addItem(quit)
 
     statusItem.menu = menu
 
     refreshNow()
-    refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+    refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshIntervalSeconds, repeats: true) { [weak self] _ in
       self?.refreshNow()
     }
+  }
+
+  func menuWillOpen(_ menu: NSMenu) {
+    // SessionWatcher-style: refresh when the user looks.
+    refreshNow()
   }
 
   @objc private func quitApp() {
@@ -89,7 +99,12 @@ final class UsageBarController: NSObject {
   }
 
   @objc private func refreshNow() {
+    if isRefreshing { return }
+    isRefreshing = true
     DispatchQueue.global(qos: .utility).async {
+      defer {
+        DispatchQueue.main.async { self.isRefreshing = false }
+      }
       do {
         let summary = try UsageFetcher.fetch()
         DispatchQueue.main.async {
@@ -99,8 +114,12 @@ final class UsageBarController: NSObject {
         }
       } catch {
         DispatchQueue.main.async {
-          self.statusItem.button?.title = "C ?"
-          self.errorItem.title = "Error: \(error.localizedDescription)"
+          if let button = self.statusItem.button {
+            button.title = "!"
+            button.image = StatusArtwork.ring(percent: nil)
+            button.toolTip = error.localizedDescription
+          }
+          self.errorItem.title = error.localizedDescription
           self.errorItem.isHidden = false
         }
       }
@@ -109,8 +128,12 @@ final class UsageBarController: NSObject {
 
   private func apply(_ summary: UsageSummary) {
     let total = summary.totalPercent
-    statusItem.button?.title = String(format: "C %.0f%%", total)
-    statusItem.button?.toolTip = summary.totalMessage
+    if let button = statusItem.button {
+      // Compact: ring + "61%" (no "C " prefix). Details live in the menu/tooltip.
+      button.image = StatusArtwork.ring(percent: total)
+      button.title = String(format: "%.0f%%", total)
+      button.toolTip = summary.totalMessage
+    }
 
     messageItem.title = summary.totalMessage
     autoItem.title = String(format: "Auto / Composer: %.0f%%", summary.autoPercent)
@@ -135,6 +158,45 @@ final class UsageBarController: NSObject {
 
     planItem.title = "Plan: \(summary.membershipType)"
     cycleItem.title = "Resets: \(summary.cycleEndText)"
+  }
+}
+
+enum StatusArtwork {
+  /// 16pt template ring. `percent` nil → empty track only.
+  static func ring(percent: Double?) -> NSImage {
+    let size = NSSize(width: 16, height: 16)
+    let image = NSImage(size: size, flipped: false) { rect in
+      let inset: CGFloat = 2
+      let track = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
+      track.lineWidth = 2
+      NSColor.labelColor.withAlphaComponent(0.22).setStroke()
+      track.stroke()
+
+      guard let percent else { return true }
+      let clamped = min(max(percent, 0), 100) / 100
+      if clamped <= 0 { return true }
+
+      let center = NSPoint(x: rect.midX, y: rect.midY)
+      let radius = (min(rect.width, rect.height) / 2) - inset
+      // AppKit angles: degrees, 0° = 3 o'clock, positive = counter-clockwise.
+      let start: CGFloat = 90
+      let end = start - (360 * CGFloat(clamped))
+      let arc = NSBezierPath()
+      arc.lineWidth = 2
+      arc.lineCapStyle = .round
+      arc.appendArc(
+        withCenter: center,
+        radius: radius,
+        startAngle: start,
+        endAngle: end,
+        clockwise: true
+      )
+      NSColor.labelColor.setStroke()
+      arc.stroke()
+      return true
+    }
+    image.isTemplate = true
+    return image
   }
 }
 
@@ -221,8 +283,9 @@ enum UsageFetcher {
 
     let cycleEnd = json["billingCycleEnd"] as? String
     let cycleText: String = {
-      guard let cycleEnd, let date = ISO8601DateFormatter().date(from: cycleEnd)
-              ?? parseFractionalISO(cycleEnd) else { return "—" }
+      guard let cycleEnd,
+            let date = ISO8601DateFormatter().date(from: cycleEnd) ?? parseFractionalISO(cycleEnd)
+      else { return "—" }
       let fmt = DateFormatter()
       fmt.locale = Locale(identifier: "en_US_POSIX")
       fmt.dateStyle = .medium
