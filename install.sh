@@ -13,6 +13,11 @@ swift build -c release
 BIN="${ROOT}/.build/release/${BIN_NAME}"
 test -x "$BIN"
 
+echo "Verifying WAL-safe session DB open…"
+VERIFY_BIN="${ROOT}/.build/verify-session-db-open"
+swiftc -O "${ROOT}/scripts/verify-session-db-open.swift" -o "${VERIFY_BIN}"
+"${VERIFY_BIN}"
+
 echo "Installing to ${APP}…"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "$BIN" "${APP}/Contents/MacOS/${BIN_NAME}"
@@ -31,9 +36,9 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>1.0.1</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>2</string>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>LSUIElement</key>
@@ -49,5 +54,5 @@ codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 killall "$BIN_NAME" 2>/dev/null || true
 open "$APP"
 
-echo "Done. Look for \"C …%\" in the macOS menu bar."
+echo "Done. Look for the usage ring in the macOS menu bar."
 echo "Optional: System Settings → General → Login Items → add CursorUsageBar."

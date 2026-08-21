@@ -9,7 +9,7 @@ let package = Package(
       name: "CursorUsageBar",
       path: "Sources/CursorUsageBar",
       linkerSettings: [
-        .linkedLibrary("sqlite3")
+        .linkedLibrary("sqlite3"),
       ]
     )
   ]

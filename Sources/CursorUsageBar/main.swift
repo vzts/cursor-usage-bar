@@ -242,17 +242,27 @@ struct UsageSummary {
 
 enum UsageFetcher {
   enum FetchError: LocalizedError {
-    case noToken
+    case noSession
+    case sessionDB
     case badJWT
     case http(Int)
     case decode
 
     var errorDescription: String? {
       switch self {
-      case .noToken: return "Cursor access token not found (sign in to Cursor IDE)"
-      case .badJWT: return "Could not parse Cursor token"
-      case .http(let code): return "HTTP \(code)"
-      case .decode: return "Unexpected usage response"
+      case .noSession:
+        return "No Cursor session in local DB (sign in to Cursor IDE once)"
+      case .sessionDB:
+        return "Could not read Cursor session database"
+      case .badJWT:
+        return "Could not parse Cursor token"
+      case .http(let code):
+        if code == 401 || code == 403 {
+          return "Session rejected (HTTP \(code)) — re-login to Cursor"
+        }
+        return "HTTP \(code)"
+      case .decode:
+        return "Unexpected usage response"
       }
     }
   }
@@ -341,24 +351,37 @@ enum UsageFetcher {
     return formatter.date(from: raw)
   }
 
+  /// Same approach as CursorBar / MeterBar / ai-usagebar: read the IDE session DB.
+  /// No Keychain prompt. Token lifetime is months — failures are almost always DB open.
+  ///
+  /// Cursor keeps `state.vscdb` in WAL mode. After checkpoint, `-wal`/`-shm` are often
+  /// gone even with no IDE process. Plain `SQLITE_OPEN_READONLY` then fails prepare with
+  /// SQLITE_CANTOPEN. `immutable=1` reads the main file without those sidecars.
   private static func readAccessToken() throws -> String {
-    let path = NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+    let path = NSHomeDirectory()
+      + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb"
+    guard FileManager.default.fileExists(atPath: path) else {
+      throw FetchError.noSession
+    }
+    let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
+    let uri = "file:\(encoded)?mode=ro&immutable=1"
     var db: OpaquePointer?
-    guard sqlite3_open_v2(path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK, let db else {
-      throw FetchError.noToken
+    guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK,
+          let db else {
+      throw FetchError.sessionDB
     }
     defer { sqlite3_close(db) }
 
     let sql = "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken' LIMIT 1;"
     var stmt: OpaquePointer?
     guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
-      throw FetchError.noToken
+      throw FetchError.sessionDB
     }
     defer { sqlite3_finalize(stmt) }
 
     guard sqlite3_step(stmt) == SQLITE_ROW,
           let cString = sqlite3_column_text(stmt, 0) else {
-      throw FetchError.noToken
+      throw FetchError.noSession
     }
     return String(cString: cString)
   }
