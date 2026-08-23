@@ -158,7 +158,7 @@ final class UsageBarController: NSObject, NSMenuDelegate {
 
   private func apply(_ summary: UsageSummary) {
     let total = summary.totalPercent
-    // Menu bar: ring only. Exact % lives in the menu / tooltip.
+    // Menu bar: solid pie only. Exact % lives in the menu / tooltip.
     applyStatusImage(StatusArtwork.ring(percent: total), tooltip: summary.totalMessage)
 
     messageItem.title = summary.totalMessage
@@ -193,37 +193,52 @@ enum StatusArtwork {
   static func ring(percent: Double?) -> NSImage {
     let size = NSSize(width: 16, height: 16)
     let image = NSImage(size: size, flipped: false) { rect in
-      // Keep stroke inside the 16pt canvas; matches typical status-icon optical size.
       let inset: CGFloat = 2
-      let track = NSBezierPath(ovalIn: rect.insetBy(dx: inset, dy: inset))
-      track.lineWidth = 1.5
-      NSColor.labelColor.withAlphaComponent(0.25).setStroke()
-      track.stroke()
+      let bounds = rect.insetBy(dx: inset, dy: inset)
+      let center = NSPoint(x: bounds.midX, y: bounds.midY)
+      let radius = min(bounds.width, bounds.height) / 2
+
+      // Template mask: faint unused area vs solid black used wedge (Amphetamine-style contrast).
+      let track = NSBezierPath(ovalIn: bounds)
+      NSColor.black.withAlphaComponent(0.12).setFill()
+      track.fill()
 
       guard let percent else { return true }
       let clamped = min(max(percent, 0), 100) / 100
       if clamped <= 0 { return true }
 
-      let center = NSPoint(x: rect.midX, y: rect.midY)
-      let radius = (min(rect.width, rect.height) / 2) - inset
+      NSColor.black.setFill()
+      if clamped >= 1 {
+        track.fill()
+        return true
+      }
+
       let start: CGFloat = 90
       let end = start - (360 * CGFloat(clamped))
-      let arc = NSBezierPath()
-      arc.lineWidth = 1.5
-      arc.lineCapStyle = .round
-      arc.appendArc(
+      let wedge = NSBezierPath()
+      wedge.move(to: center)
+      wedge.line(to: pointOnCircle(center: center, radius: radius, degrees: start))
+      wedge.appendArc(
         withCenter: center,
         radius: radius,
         startAngle: start,
         endAngle: end,
         clockwise: true
       )
-      NSColor.labelColor.setStroke()
-      arc.stroke()
+      wedge.close()
+      wedge.fill()
       return true
     }
     image.isTemplate = true
     return image
+  }
+
+  private static func pointOnCircle(center: NSPoint, radius: CGFloat, degrees: CGFloat) -> NSPoint {
+    let radians = degrees * .pi / 180
+    return NSPoint(
+      x: center.x + radius * cos(radians),
+      y: center.y + radius * sin(radians)
+    )
   }
 }
 
