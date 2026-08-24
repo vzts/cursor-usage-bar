@@ -19,11 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" width="880" alt="CursorUsageBar プレビュー" />
-</p>
-
-<p align="center">
-  <img src="assets/menu-preview.png" width="560" alt="メニュープレビュー" />
+  <img src="assets/hero.png" width="720" alt="CursorUsageBar プレビュー" />
 </p>
 
 <p align="center">
@@ -31,6 +27,10 @@
 </p>
 
 ---
+
+## なぜ
+
+Cursor アプリ内の **% は遅延したり**、実際の Included **$ 使用/上限**と **一致しない**ことがあります。CursorUsageBar はメニューバーで両方を表示し、Included ドルの枯渇や Credits・Slow pool の適用をすぐ確認できます。
 
 ## インストール
 
@@ -40,22 +40,30 @@ cd cursor-usage-bar
 ./install.sh
 ```
 
-**要件:** macOS 14+、Xcode CLT / Swift 5.9+、この Mac で Cursor IDE に一度以上サインイン。
+リリースビルド → WAL-safe セッション DB 読み取り検証 → `~/Applications/CursorUsageBar.app` インストール → 起動。
+
+**要件:** macOS 14+、Xcode CLT / Swift 5.9+、この Mac で Cursor IDE に一度以上サインイン（トークンはローカル `state.vscdb`、IDE 起動不要）。
 
 ## 表示項目
 
 | 項目 | 意味 |
 | --- | --- |
-| リング / ツールチップ | 表示用 total % · included `$使用/$上限` · Slow pool（有効時） |
+| メニューバー円グラフ / ツールチップ | 表示用 total % · included `$使用/$上限` · Slow pool（有効時） |
 | 見出し | ドル枯渇時は “Included limit reached”、それ以外は Cursor の % メッセージ |
-| Included | プラン **$ 使用 / $ 上限** — 枯渇の目安 |
+| Included | `$使用 / $上限` + `· exhausted` または `· $X left` |
 | Pools | Auto · API · Total 表示 % |
-| On-demand | 従量（有効時） |
-| Credits | プロモクレジット（ある場合） |
-| Slow pool | Auto のみ遅延キュー（有効時） |
-| Meta | プラン · 請求サイクル更新 |
+| On-demand | `$使用 / $上限`、`$使用 used`、または `off` |
+| Credits | `$残 / $総 · 期限` — プロモ grant なしなら非表示 |
+| Slow pool | 遅延キュー — Auto only または limited models · grant $ · ~delay — 非活性時は非表示 |
+| Meta | 例: `pro · resets Sep 17 (23d)` |
 
-アプリ内 % はドルとずれることがあるため、両方表示します。
+### メニュー操作
+
+| 操作 | |
+| --- | --- |
+| **Refresh** (`r`) | 最新使用量を取得 |
+| **Open Dashboard** (`o`) | [cursor.com/dashboard/spending](https://cursor.com/dashboard/spending) |
+| **Quit** (`q`) | 終了 |
 
 ### 更新
 
@@ -67,18 +75,26 @@ cd cursor-usage-bar
 
 ## 仕組み
 
-ローカル `state.vscdb` から `cursorAuth/accessToken` を読み（読み取り専用、Keychain なし）、並列取得:
+1. `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` から  
+   `cursorAuth/accessToken` を読み取り（`mode=ro&immutable=1` — **Keychain なし**）
+2. JWT `sub` からダッシュボード Cookie を生成
+3. **並列**取得:
+   - `GET https://cursor.com/api/usage-summary` — Included $、プール %、on-demand、プラン/サイクル
+   - `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants` — Credits + Slow pool
+4. Credits / Slow pool は **best-effort** — grants RPC が失敗しても基本使用量は表示
 
-- `GET https://cursor.com/api/usage-summary`
-- `POST …/GetUsageLimitStatusAndActiveGrants`
+非公式ダッシュボード API — **公式 Cursor 製品ではありません**。トークンは refresh ごとに読み取るだけで書き込みません。
 
-非公式ダッシュボード API — 公式 Cursor 製品ではありません。
+## プライバシー
+
+リポジトリにトークン・メール・端末パスは含まれません。実行時は **お使いの Mac** のローカル Cursor セッションのみ読み取ります。
 
 ## アンインストール
 
 ```bash
 killall CursorUsageBar 2>/dev/null || true
 rm -rf ~/Applications/CursorUsageBar.app
+# ログイン項目に追加した場合は削除
 ```
 
 ## ライセンス

@@ -19,11 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" width="880" alt="CursorUsageBar-Vorschau" />
-</p>
-
-<p align="center">
-  <img src="assets/menu-preview.png" width="560" alt="Menü-Vorschau" />
+  <img src="assets/hero.png" width="720" alt="CursorUsageBar-Vorschau" />
 </p>
 
 <p align="center">
@@ -31,6 +27,10 @@
 </p>
 
 ---
+
+## Warum
+
+Cursor’s In-App-**% kann hinterherhinken** oder vom echten Included-**$ verbraucht/Limit** **abweichen**. CursorUsageBar zeigt beides in der Menüleiste — so siehst du, wann Included-Dollar wirklich leer sind und wann Credits oder Slow Pool greifen.
 
 ## Installation
 
@@ -40,22 +40,30 @@ cd cursor-usage-bar
 ./install.sh
 ```
 
-**Voraussetzungen:** macOS 14+, Xcode CLT / Swift 5.9+, Cursor IDE mindestens einmal auf diesem Mac angemeldet.
+Release-Build → WAL-safe Session-DB-Lesetest → Installation nach `~/Applications/CursorUsageBar.app` → Start.
+
+**Voraussetzungen:** macOS 14+, Xcode CLT / Swift 5.9+, Cursor IDE mindestens einmal auf diesem Mac angemeldet (Token in lokaler `state.vscdb`; IDE muss nicht laufen).
 
 ## Anzeige
 
 | Element | Bedeutung |
 | --- | --- |
-| Ring / Tooltip | Anzeige-% · included `$verbraucht/$Limit` · Slow pool falls aktiv |
+| Menüleisten-Tortendiagramm / Tooltip | Anzeige-% · included `$verbraucht/$Limit` · Slow pool falls aktiv |
 | Überschrift | „Included limit reached“, wenn $ leer; sonst Cursor-%-Text |
-| Included | Plan-**$ verbraucht / $ Limit** — zuverlässiges Erschöpfungssignal |
+| Included | `$verbraucht / $Limit` + `· exhausted` oder `· $X left` |
 | Pools | Auto · API · Total Anzeige-% |
-| On-demand | Pay-as-you-go, falls aktiv |
-| Credits | Promo-Grants, falls vorhanden |
-| Slow pool | Auto-only-Warteschlange, falls aktiv |
-| Meta | Plan · Zyklus-Reset |
+| On-demand | `$verbraucht / $Limit`, `$verbraucht used` oder `off` |
+| Credits | `$Rest / $Gesamt · Ablauf` — ausgeblendet ohne Promo-Grants |
+| Slow pool | Verzögerungs-Warteschlange — Auto only oder limited models · Grant $ · ~delay — ausgeblendet wenn inaktiv |
+| Meta | z. B. `pro · resets Sep 17 (23d)` |
 
-In-App-% kann von den Dollar abweichen; beides wird gezeigt.
+### Menüaktionen
+
+| Aktion | |
+| --- | --- |
+| **Refresh** (`r`) | Neueste Nutzung abrufen |
+| **Open Dashboard** (`o`) | [cursor.com/dashboard/spending](https://cursor.com/dashboard/spending) |
+| **Quit** (`q`) | Beenden |
 
 ### Aktualisierung
 
@@ -67,18 +75,27 @@ In-App-% kann von den Dollar abweichen; beides wird gezeigt.
 
 ## Funktionsweise
 
-Liest `cursorAuth/accessToken` aus lokaler `state.vscdb` (nur lesen, kein Keychain), parallel:
+1. Liest `cursorAuth/accessToken` aus  
+   `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`  
+   mit `mode=ro&immutable=1` — **kein Keychain**
+2. Leitet Dashboard-Cookie aus JWT `sub` ab
+3. **Parallel**:
+   - `GET https://cursor.com/api/usage-summary` — Included $, Pool-%, On-demand, Plan/Zyklus
+   - `POST https://api2.cursor.sh/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants` — Credits + Slow pool
+4. Credits / Slow pool **best-effort** — Hauptnutzung bleibt sichtbar, wenn Grants-RPC fehlschlägt
 
-- `GET https://cursor.com/api/usage-summary`
-- `POST …/GetUsageLimitStatusAndActiveGrants`
+Inoffizielle Dashboard-API — **kein offizielles Cursor-Produkt**. Token wird bei jedem Refresh nur gelesen, nie geschrieben.
 
-Inoffizielle Dashboard-API — kein offizielles Cursor-Produkt.
+## Datenschutz
+
+Im Repo stecken weder Token noch E-Mail noch Gerätepfade. Zur Laufzeit wird nur die lokale Cursor-Session auf **deinem** Mac gelesen.
 
 ## Deinstallation
 
 ```bash
 killall CursorUsageBar 2>/dev/null || true
 rm -rf ~/Applications/CursorUsageBar.app
+# Aus Anmeldeobjekten entfernen, falls hinzugefügt
 ```
 
 ## Lizenz
