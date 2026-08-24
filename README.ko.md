@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" width="720" alt="CursorUsageBar 미리보기" />
+  <img src="assets/hero.png" width="380" alt="CursorUsageBar 미리보기" />
 </p>
 
 <p align="center">

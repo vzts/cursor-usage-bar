@@ -139,8 +139,17 @@ private func drawMenuPanel(in rect: NSRect) {
 }
 
 private func renderHero() -> NSImage {
-  let width: CGFloat = 1200
-  let height: CGFloat = 720
+  let menuW: CGFloat = 300
+  let menuH: CGFloat = 248
+  let barHeight: CGFloat = 44
+  let gap: CGFloat = 8
+  let padX: CGFloat = 40
+  let padTop: CGFloat = 24
+  let padBottom: CGFloat = 28
+
+  let width = menuW + padX * 2
+  let height = padTop + barHeight + gap + menuH + padBottom
+
   let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
     let gradient = NSGradient(
       colors: [
@@ -150,26 +159,28 @@ private func renderHero() -> NSImage {
     )!
     gradient.draw(in: rect, angle: 90)
 
-    let barHeight: CGFloat = 52
+    let barRect = NSRect(
+      x: padX - 12,
+      y: rect.maxY - padTop - barHeight,
+      width: menuW + 24,
+      height: barHeight
+    )
     NSColor(calibratedWhite: 0.08, alpha: 0.85).setFill()
-    NSRect(x: 0, y: rect.maxY - barHeight, width: width, height: barHeight).fill()
+    NSBezierPath(roundedRect: barRect, xRadius: 8, yRadius: 8).fill()
 
     let iconSize: CGFloat = 18
     let iconX = width / 2 - iconSize / 2
-    let iconY = rect.maxY - barHeight + (barHeight - iconSize) / 2
-    let iconRect = NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize)
+    let iconY = barRect.minY + (barHeight - iconSize) / 2
     pieWedge(
-      in: iconRect,
+      in: NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize),
       percent: 71,
       fill: NSColor(calibratedWhite: 0.95, alpha: 1),
       track: NSColor(calibratedWhite: 0.35, alpha: 1)
     )
 
-    let menuW: CGFloat = 300
-    let menuH: CGFloat = 248
     let menuRect = NSRect(
-      x: iconX + iconSize / 2 - menuW / 2,
-      y: iconY - menuH - 10,
+      x: padX,
+      y: barRect.minY - gap - menuH,
       width: menuW,
       height: menuH
     )
