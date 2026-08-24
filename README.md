@@ -28,6 +28,7 @@ This builds a release binary, verifies WAL-safe session DB reads, installs `~/Ap
 | Auto / Composer | Included Auto + Composer pool |
 | API / Other models | Included named/API model pool |
 | On-demand | Pay-as-you-go bucket (if enabled) |
+| Credits | Promo/prepaid credit balance (`remaining / total`) when present, plus earliest expiry |
 | Plan / Resets | Membership + billing cycle end |
 
 ### Refresh cadence (adaptive)
@@ -48,11 +49,13 @@ This follows common menu-bar tracker practice: ClaudeBar’s **1-minute floor** 
    (same approach as [CursorBar](https://github.com/c-johannesen/cursorbar) / MeterBar / ai-usagebar — **no Keychain prompt**)
 2. Opens that SQLite DB with `mode=ro&immutable=1` so WAL sidecars are not required (IDE need not be running)
 3. Derives the `WorkosCursorSessionToken` cookie from the JWT `sub`
-4. Calls `GET https://cursor.com/api/usage-summary`
+4. Calls `GET https://cursor.com/api/usage-summary` for included usage %
+5. Calls `POST https://cursor.com/api/dashboard/get-credit-grants-balance` for the Spending-page Credits balance
+6. Calls `POST …/GetUsageLimitStatusAndActiveGrants` (Connect RPC) for credit grant expiry dates
 
 No API key is stored. The token is read fresh on each refresh and never written by this app.
 
-There is **no official personal usage API**. Community trackers all reverse the dashboard cookie + `/api/usage-summary`. Session JWTs typically last months; sudden failures are usually local DB open issues, not minute-by-minute expiry.
+There is **no official personal usage API**. Community trackers reverse the dashboard cookie / session JWT endpoints. Session JWTs typically last months; sudden failures are usually local DB open issues, not minute-by-minute expiry.
 
 ## Privacy
 

@@ -35,6 +35,8 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private let autoItem = NSMenuItem(title: "Auto: —", action: nil, keyEquivalent: "")
   private let apiItem = NSMenuItem(title: "API: —", action: nil, keyEquivalent: "")
   private let onDemandItem = NSMenuItem(title: "On-demand: —", action: nil, keyEquivalent: "")
+  private let creditsItem = NSMenuItem(title: "Credits: —", action: nil, keyEquivalent: "")
+  private let creditsExpireItem = NSMenuItem(title: "Credits expire: —", action: nil, keyEquivalent: "")
   private let planItem = NSMenuItem(title: "Plan: —", action: nil, keyEquivalent: "")
   private let cycleItem = NSMenuItem(title: "Cycle: —", action: nil, keyEquivalent: "")
   private let messageItem = NSMenuItem(title: "—", action: nil, keyEquivalent: "")
@@ -50,10 +52,15 @@ final class UsageBarController: NSObject, NSMenuDelegate {
       applyStatusImage(StatusArtwork.ring(percent: nil), tooltip: "Cursor usage")
     }
 
-    for item in [messageItem, autoItem, apiItem, onDemandItem, planItem, cycleItem, errorItem] {
+    for item in [
+      messageItem, autoItem, apiItem, onDemandItem, creditsItem, creditsExpireItem,
+      planItem, cycleItem, errorItem,
+    ] {
       item.isEnabled = false
     }
     errorItem.isHidden = true
+    creditsItem.isHidden = true
+    creditsExpireItem.isHidden = true
 
     menu.delegate = self
     menu.addItem(messageItem)
@@ -61,6 +68,8 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     menu.addItem(autoItem)
     menu.addItem(apiItem)
     menu.addItem(onDemandItem)
+    menu.addItem(creditsItem)
+    menu.addItem(creditsExpireItem)
     menu.addItem(.separator())
     menu.addItem(planItem)
     menu.addItem(cycleItem)
@@ -115,7 +124,7 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   }
 
   @objc private func openDashboard() {
-    if let url = URL(string: "https://cursor.com/dashboard") {
+    if let url = URL(string: "https://cursor.com/dashboard/spending") {
       NSWorkspace.shared.open(url)
     }
   }
@@ -182,6 +191,24 @@ final class UsageBarController: NSObject, NSMenuDelegate {
       onDemandItem.title = "On-demand: off"
     }
 
+    if let credits = summary.credits, credits.hasGrants {
+      creditsItem.isHidden = false
+      creditsItem.title = String(
+        format: "Credits: $%.2f / $%.2f remaining",
+        Double(credits.remainingCents) / 100.0,
+        Double(credits.totalCents) / 100.0
+      )
+      if let expireText = credits.expireText {
+        creditsExpireItem.isHidden = false
+        creditsExpireItem.title = "Credits expire: \(expireText)"
+      } else {
+        creditsExpireItem.isHidden = true
+      }
+    } else {
+      creditsItem.isHidden = true
+      creditsExpireItem.isHidden = true
+    }
+
     planItem.title = "Plan: \(summary.membershipType)"
     cycleItem.title = "Resets: \(summary.cycleEndText)"
   }
@@ -243,6 +270,13 @@ enum StatusArtwork {
 }
 
 
+struct CreditsInfo {
+  var hasGrants: Bool
+  var remainingCents: Int
+  var totalCents: Int
+  var expireText: String?
+}
+
 struct UsageSummary {
   var membershipType: String
   var autoPercent: Double
@@ -253,6 +287,7 @@ struct UsageSummary {
   var onDemandUsed: Int
   var onDemandLimit: Int?
   var cycleEndText: String
+  var credits: CreditsInfo?
 }
 
 enum UsageFetcher {
@@ -287,34 +322,10 @@ enum UsageFetcher {
     let sub = try jwtSubject(token)
     let cookieValue = "\(sub)%3A%3A\(token)"
 
-    var request = URLRequest(url: URL(string: "https://cursor.com/api/usage-summary")!)
-    request.setValue("WorkosCursorSessionToken=\(cookieValue)", forHTTPHeaderField: "Cookie")
-    request.setValue("application/json", forHTTPHeaderField: "Accept")
-    request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
-    request.timeoutInterval = 20
-
-    let sema = DispatchSemaphore(value: 0)
-    var dataBox: Data?
-    var responseBox: URLResponse?
-    var errorBox: Error?
-
-    URLSession.shared.dataTask(with: request) { data, response, error in
-      dataBox = data
-      responseBox = response
-      errorBox = error
-      sema.signal()
-    }.resume()
-    _ = sema.wait(timeout: .now() + 25)
-
-    if let errorBox { throw errorBox }
-    guard let http = responseBox as? HTTPURLResponse else { throw FetchError.http(-1) }
-    guard (200..<300).contains(http.statusCode), let dataBox else {
-      throw FetchError.http(http.statusCode)
-    }
-
-    guard let json = try JSONSerialization.jsonObject(with: dataBox) as? [String: Any] else {
-      throw FetchError.decode
-    }
+    let json = try getJSON(
+      url: "https://cursor.com/api/usage-summary",
+      cookie: cookieValue
+    )
 
     let membership = (json["membershipType"] as? String) ?? "unknown"
     let individual = json["individualUsage"] as? [String: Any] ?? [:]
@@ -339,13 +350,10 @@ enum UsageFetcher {
       guard let cycleEnd,
             let date = ISO8601DateFormatter().date(from: cycleEnd) ?? parseFractionalISO(cycleEnd)
       else { return "—" }
-      let fmt = DateFormatter()
-      fmt.locale = Locale(identifier: "en_US_POSIX")
-      fmt.dateStyle = .medium
-      fmt.timeStyle = .none
-      let days = Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
-      return "\(fmt.string(from: date)) (\(max(days, 0))d)"
+      return formatDateWithDaysLeft(date)
     }()
+
+    let credits = fetchCredits(token: token, cookie: cookieValue)
 
     return UsageSummary(
       membershipType: membership,
@@ -356,8 +364,153 @@ enum UsageFetcher {
       onDemandEnabled: (onDemand["enabled"] as? Bool) ?? false,
       onDemandUsed: (onDemand["used"] as? Int) ?? 0,
       onDemandLimit: onDemand["limit"] as? Int,
-      cycleEndText: cycleText
+      cycleEndText: cycleText,
+      credits: credits
     )
+  }
+
+  /// Spending-page Credits card: promo/prepaid grants applied to Cursor usage.
+  /// Balance: `POST /api/dashboard/get-credit-grants-balance`
+  /// Expiry: earliest `expiresAtMs` from `GetUsageLimitStatusAndActiveGrants`
+  private static func fetchCredits(token: String, cookie: String) -> CreditsInfo? {
+    let balanceJSON: [String: Any]
+    do {
+      balanceJSON = try postJSON(
+        url: "https://cursor.com/api/dashboard/get-credit-grants-balance",
+        cookie: cookie,
+        body: Data("{}".utf8)
+      )
+    } catch {
+      return nil
+    }
+
+    let hasGrants = (balanceJSON["hasCreditGrants"] as? Bool) ?? false
+    let total = intValue(balanceJSON["totalCents"]) ?? 0
+    // Prefer creditBalanceCents; fall back to total − used when the balance field is omitted.
+    let remaining: Int = {
+      if let balance = intValue(balanceJSON["creditBalanceCents"]) { return balance }
+      if let used = intValue(balanceJSON["usedCents"]) { return max(total - used, 0) }
+      return 0
+    }()
+    guard hasGrants, total > 0 || remaining > 0 else {
+      return CreditsInfo(hasGrants: false, remainingCents: 0, totalCents: 0, expireText: nil)
+    }
+
+    let expireText = earliestGrantExpiryText(token: token)
+    return CreditsInfo(
+      hasGrants: true,
+      remainingCents: remaining,
+      totalCents: total,
+      expireText: expireText
+    )
+  }
+
+  private static func earliestGrantExpiryText(token: String) -> String? {
+    let json: [String: Any]
+    do {
+      json = try postJSON(
+        url: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants",
+        bearer: token,
+        body: Data("{}".utf8),
+        connectRPC: true
+      )
+    } catch {
+      return nil
+    }
+
+    let grants = json["activeGrants"] as? [[String: Any]] ?? []
+    var earliest: Date?
+    for grant in grants {
+      guard let ms = intValue(grant["expiresAtMs"]) else { continue }
+      let date = Date(timeIntervalSince1970: TimeInterval(ms) / 1000.0)
+      if let current = earliest {
+        if date < current { earliest = date }
+      } else {
+        earliest = date
+      }
+    }
+    guard let earliest else { return nil }
+    return formatDateWithDaysLeft(earliest)
+  }
+
+  private static func formatDateWithDaysLeft(_ date: Date) -> String {
+    let fmt = DateFormatter()
+    fmt.locale = Locale(identifier: "en_US_POSIX")
+    fmt.dateStyle = .medium
+    fmt.timeStyle = .none
+    let days = Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0
+    return "\(fmt.string(from: date)) (\(max(days, 0))d)"
+  }
+
+  private static func intValue(_ raw: Any?) -> Int? {
+    switch raw {
+    case let v as Int: return v
+    case let v as NSNumber: return v.intValue
+    case let v as String: return Int(v)
+    default: return nil
+    }
+  }
+
+  private static func getJSON(url: String, cookie: String) throws -> [String: Any] {
+    var request = URLRequest(url: URL(string: url)!)
+    request.httpMethod = "GET"
+    request.setValue("WorkosCursorSessionToken=\(cookie)", forHTTPHeaderField: "Cookie")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+    request.timeoutInterval = 20
+    return try performJSON(request)
+  }
+
+  private static func postJSON(
+    url: String,
+    cookie: String? = nil,
+    bearer: String? = nil,
+    body: Data,
+    connectRPC: Bool = false
+  ) throws -> [String: Any] {
+    var request = URLRequest(url: URL(string: url)!)
+    request.httpMethod = "POST"
+    request.httpBody = body
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("application/json", forHTTPHeaderField: "Accept")
+    request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+    request.setValue("https://cursor.com", forHTTPHeaderField: "Origin")
+    request.timeoutInterval = 20
+    if let cookie {
+      request.setValue("WorkosCursorSessionToken=\(cookie)", forHTTPHeaderField: "Cookie")
+    }
+    if let bearer {
+      request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+    }
+    if connectRPC {
+      request.setValue("1", forHTTPHeaderField: "Connect-Protocol-Version")
+    }
+    return try performJSON(request)
+  }
+
+  private static func performJSON(_ request: URLRequest) throws -> [String: Any] {
+    let sema = DispatchSemaphore(value: 0)
+    var dataBox: Data?
+    var responseBox: URLResponse?
+    var errorBox: Error?
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+      dataBox = data
+      responseBox = response
+      errorBox = error
+      sema.signal()
+    }.resume()
+    _ = sema.wait(timeout: .now() + 25)
+
+    if let errorBox { throw errorBox }
+    guard let http = responseBox as? HTTPURLResponse else { throw FetchError.http(-1) }
+    guard (200..<300).contains(http.statusCode), let dataBox else {
+      throw FetchError.http(http.statusCode)
+    }
+    guard let json = try JSONSerialization.jsonObject(with: dataBox) as? [String: Any] else {
+      throw FetchError.decode
+    }
+    return json
   }
 
   private static func parseFractionalISO(_ raw: String) -> Date? {
