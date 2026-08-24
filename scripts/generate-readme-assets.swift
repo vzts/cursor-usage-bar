@@ -93,9 +93,38 @@ private func renderIcon() -> NSImage {
   return image
 }
 
-private func drawMenuPanel(in rect: NSRect) {
-  let panel = NSBezierPath(roundedRect: rect, xRadius: 10, yRadius: 10)
-  NSColor(calibratedWhite: 0.16, alpha: 0.96).setFill()
+private struct HeroLayout {
+  var menuW: CGFloat
+  var menuH: CGFloat
+  var barHeight: CGFloat
+  var gap: CGFloat
+  var pad: CGFloat
+  var iconSize: CGFloat
+  var fontBody: CGFloat
+  var fontMedium: CGFloat
+  var fontSmall: CGFloat
+  var corner: CGFloat
+
+  var width: CGFloat { menuW + pad * 2 }
+  var height: CGFloat { pad + barHeight + gap + menuH + pad }
+}
+
+private let heroLayout = HeroLayout(
+  menuW: 600,
+  menuH: 272,
+  barHeight: 52,
+  gap: 12,
+  pad: 20,
+  iconSize: 22,
+  fontBody: 16,
+  fontMedium: 16,
+  fontSmall: 15,
+  corner: 12
+)
+
+private func drawMenuPanel(in rect: NSRect, layout: HeroLayout) {
+  let panel = NSBezierPath(roundedRect: rect, xRadius: layout.corner, yRadius: layout.corner)
+  NSColor(calibratedWhite: 0.16, alpha: 0.98).setFill()
   panel.fill()
   NSColor(calibratedWhite: 0.28, alpha: 0.35).setStroke()
   panel.lineWidth = 1
@@ -104,87 +133,81 @@ private func drawMenuPanel(in rect: NSRect) {
   let muted = NSColor(calibratedWhite: 0.55, alpha: 1)
   let text = NSColor(calibratedWhite: 0.92, alpha: 1)
   let accent = NSColor(calibratedRed: 0.35, green: 0.62, blue: 1, alpha: 1)
+  let inset: CGFloat = 18
 
   func line(_ string: String, y: CGFloat, font: NSFont, color: NSColor) {
     let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
-    (string as NSString).draw(at: NSPoint(x: rect.minX + 16, y: y), withAttributes: attrs)
+    (string as NSString).draw(at: NSPoint(x: rect.minX + inset, y: y), withAttributes: attrs)
   }
 
-  let body = NSFont.systemFont(ofSize: 13, weight: .regular)
-  let bodyMedium = NSFont.systemFont(ofSize: 13, weight: .medium)
-  let small = NSFont.systemFont(ofSize: 12, weight: .regular)
+  let body = NSFont.systemFont(ofSize: layout.fontBody, weight: .regular)
+  let bodyMedium = NSFont.systemFont(ofSize: layout.fontMedium, weight: .medium)
+  let small = NSFont.systemFont(ofSize: layout.fontSmall, weight: .regular)
 
-  var y = rect.maxY - 28
+  var y = rect.maxY - 32
   line("Included limit reached", y: y, font: bodyMedium, color: muted)
-  y -= 24
+  y -= 28
   line("Included: $20.00 / $20.00 · exhausted", y: y, font: body, color: text)
-  y -= 22
+  y -= 26
   line("Auto 68% · API 100% · Total 71%", y: y, font: body, color: text)
-  y -= 22
+  y -= 26
   line("On-demand: off", y: y, font: body, color: text)
-  y -= 14
+  y -= 16
   NSColor(calibratedWhite: 0.32, alpha: 1).setFill()
-  NSRect(x: rect.minX + 12, y: y, width: rect.width - 24, height: 1).fill()
-  y -= 18
+  NSRect(x: rect.minX + 14, y: y, width: rect.width - 28, height: 1).fill()
+  y -= 22
   line("pro · resets Sep 17 (23d)", y: y, font: small, color: muted)
-  y -= 14
+  y -= 16
   NSColor(calibratedWhite: 0.32, alpha: 1).setFill()
-  NSRect(x: rect.minX + 12, y: y, width: rect.width - 24, height: 1).fill()
-  y -= 22
+  NSRect(x: rect.minX + 14, y: y, width: rect.width - 28, height: 1).fill()
+  y -= 28
   line("Refresh", y: y, font: body, color: text)
-  y -= 22
+  y -= 26
   line("Open Dashboard", y: y, font: body, color: accent)
-  y -= 22
+  y -= 26
   line("Quit", y: y, font: body, color: text)
 }
 
 private func renderHero() -> NSImage {
-  let menuW: CGFloat = 300
-  let menuH: CGFloat = 248
-  let barHeight: CGFloat = 44
-  let gap: CGFloat = 8
-  let padX: CGFloat = 40
-  let padTop: CGFloat = 24
-  let padBottom: CGFloat = 28
-
-  let width = menuW + padX * 2
-  let height = padTop + barHeight + gap + menuH + padBottom
+  let layout = heroLayout
+  let width = layout.width
+  let height = layout.height
 
   let image = NSImage(size: NSSize(width: width, height: height), flipped: false) { rect in
+    // Frame-filling backdrop — no extra canvas beyond the mock UI.
     let gradient = NSGradient(
       colors: [
-        NSColor(calibratedRed: 0.07, green: 0.08, blue: 0.11, alpha: 1),
-        NSColor(calibratedRed: 0.12, green: 0.13, blue: 0.17, alpha: 1),
+        NSColor(calibratedRed: 0.09, green: 0.10, blue: 0.13, alpha: 1),
+        NSColor(calibratedRed: 0.11, green: 0.12, blue: 0.16, alpha: 1),
       ]
     )!
     gradient.draw(in: rect, angle: 90)
 
     let barRect = NSRect(
-      x: padX - 12,
-      y: rect.maxY - padTop - barHeight,
-      width: menuW + 24,
-      height: barHeight
+      x: layout.pad,
+      y: rect.maxY - layout.pad - layout.barHeight,
+      width: layout.menuW,
+      height: layout.barHeight
     )
-    NSColor(calibratedWhite: 0.08, alpha: 0.85).setFill()
-    NSBezierPath(roundedRect: barRect, xRadius: 8, yRadius: 8).fill()
+    NSColor(calibratedWhite: 0.08, alpha: 0.92).setFill()
+    NSBezierPath(roundedRect: barRect, xRadius: layout.corner, yRadius: layout.corner).fill()
 
-    let iconSize: CGFloat = 18
-    let iconX = width / 2 - iconSize / 2
-    let iconY = barRect.minY + (barHeight - iconSize) / 2
+    let iconX = width / 2 - layout.iconSize / 2
+    let iconY = barRect.minY + (layout.barHeight - layout.iconSize) / 2
     pieWedge(
-      in: NSRect(x: iconX, y: iconY, width: iconSize, height: iconSize),
+      in: NSRect(x: iconX, y: iconY, width: layout.iconSize, height: layout.iconSize),
       percent: 71,
       fill: NSColor(calibratedWhite: 0.95, alpha: 1),
       track: NSColor(calibratedWhite: 0.35, alpha: 1)
     )
 
     let menuRect = NSRect(
-      x: padX,
-      y: barRect.minY - gap - menuH,
-      width: menuW,
-      height: menuH
+      x: layout.pad,
+      y: layout.pad,
+      width: layout.menuW,
+      height: layout.menuH
     )
-    drawMenuPanel(in: menuRect)
+    drawMenuPanel(in: menuRect, layout: layout)
     return true
   }
   return image
@@ -203,4 +226,5 @@ if FileManager.default.fileExists(atPath: assets.appendingPathComponent("menu-pr
   try FileManager.default.removeItem(at: assets.appendingPathComponent("menu-preview.png"))
 }
 
-print("Wrote \(assets.path)/icon.png and hero.png")
+print("Wrote \(assets.path)/icon.png (\(Int(icon.size.width))x\(Int(icon.size.height)))")
+print("Wrote \(assets.path)/hero.png (\(Int(hero.size.width))x\(Int(hero.size.height)))")

@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" width="380" alt="CursorUsageBar-Vorschau" />
+  <img src="assets/hero.png" width="640" alt="CursorUsageBar-Vorschau" />
 </p>
 
 <p align="center">
