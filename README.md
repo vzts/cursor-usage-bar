@@ -29,6 +29,7 @@ This builds a release binary, verifies WAL-safe session DB reads, installs `~/Ap
 | API / Other models | Included named/API model pool |
 | On-demand | Pay-as-you-go bucket (if enabled) |
 | Credits | Promo/prepaid credit balance (`remaining / total`) when present, plus earliest expiry |
+| Slow pool | After included usage is exhausted: Auto-only delayed queue + `usage_limit_policy` grant |
 | Plan / Resets | Membership + billing cycle end |
 
 ### Refresh cadence (adaptive)
@@ -51,7 +52,7 @@ This follows common menu-bar tracker practice: ClaudeBar’s **1-minute floor** 
 3. Derives the `WorkosCursorSessionToken` cookie from the JWT `sub`
 4. Calls `GET https://cursor.com/api/usage-summary` for included usage %
 5. Calls `POST https://cursor.com/api/dashboard/get-credit-grants-balance` for the Spending-page Credits balance
-6. Calls `POST …/GetUsageLimitStatusAndActiveGrants` (Connect RPC) for credit grant expiry dates
+6. Calls `POST …/GetUsageLimitStatusAndActiveGrants` (Connect RPC) for promo-credit expiry and slow-pool / `usage_limit_policy` status
 
 No API key is stored. The token is read fresh on each refresh and never written by this app.
 
