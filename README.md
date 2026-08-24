@@ -2,7 +2,7 @@
 
 Minimal macOS menu bar app that shows your **Cursor** plan usage at a glance.
 
-Menu bar shows a **16×16pt template usage ring** in a standard `squareLength` slot (same rhythm as Amphetamine / system status icons) filled by Cursor’s **total included usage %** (`totalPercentUsed`) — the same idea as *“You've used X% of your included total usage”* — not the misleading `used/limit` counters some trackers treat as 100%.
+Menu bar shows a **16×16pt template usage ring** filled by Cursor’s display **total %** (`totalPercentUsed`). The menu also shows the **included $ used/limit** (the reliable exhaustion signal — Cursor’s % fields can lag or disagree with dollars).
 
 ## Requirements
 
@@ -24,13 +24,14 @@ This builds a release binary, verifies WAL-safe session DB reads, installs `~/Ap
 
 | UI | Meaning |
 | --- | --- |
-| Ring fill | Total included usage used this billing cycle (open menu for exact %) |
-| Auto / Composer | Included Auto + Composer pool |
-| API / Other models | Included named/API model pool |
+| Ring / tooltip | Display total % · included `$used/$limit` · slow-pool hint when active |
+| Headline | “Included limit reached” when `$` remaining is 0; otherwise Cursor’s % message |
+| Included | Plan included dollars used / limit (source of truth for hard exhaustion) |
+| Pools | Auto · API · Total display percentages |
 | On-demand | Pay-as-you-go bucket (if enabled) |
-| Credits | Promo/prepaid credit balance (`remaining / total`) when present, plus earliest expiry |
-| Slow pool | After included usage is exhausted: Auto-only delayed queue + `usage_limit_policy` grant |
-| Plan / Resets | Membership + billing cycle end |
+| Credits | Promo grants (`remaining / total` · expiry) when present |
+| Slow pool | Auto-only delay queue + `usage_limit_policy` grant when active |
+| Meta | Membership · billing cycle reset |
 
 ### Refresh cadence (adaptive)
 
@@ -50,9 +51,9 @@ This follows common menu-bar tracker practice: ClaudeBar’s **1-minute floor** 
    (same approach as [CursorBar](https://github.com/c-johannesen/cursorbar) / MeterBar / ai-usagebar — **no Keychain prompt**)
 2. Opens that SQLite DB with `mode=ro&immutable=1` so WAL sidecars are not required (IDE need not be running)
 3. Derives the `WorkosCursorSessionToken` cookie from the JWT `sub`
-4. Calls `GET https://cursor.com/api/usage-summary` for included usage %
-5. Calls `POST https://cursor.com/api/dashboard/get-credit-grants-balance` for the Spending-page Credits balance
-6. Calls `POST …/GetUsageLimitStatusAndActiveGrants` (Connect RPC) for promo-credit expiry and slow-pool / `usage_limit_policy` status
+4. In **parallel**:
+   - `GET https://cursor.com/api/usage-summary` — included $, pool %, on-demand, plan/cycle
+   - `POST …/GetUsageLimitStatusAndActiveGrants` — promo credits + slow-pool / `usage_limit_policy`
 
 No API key is stored. The token is read fresh on each refresh and never written by this app.
 

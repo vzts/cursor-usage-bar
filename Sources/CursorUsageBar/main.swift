@@ -32,17 +32,13 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   private var isRefreshing = false
   private var lastMenuOpenAt: Date?
 
-  private let autoItem = NSMenuItem(title: "Auto: —", action: nil, keyEquivalent: "")
-  private let apiItem = NSMenuItem(title: "API: —", action: nil, keyEquivalent: "")
+  private let messageItem = NSMenuItem(title: "—", action: nil, keyEquivalent: "")
+  private let includedItem = NSMenuItem(title: "Included: —", action: nil, keyEquivalent: "")
+  private let poolsItem = NSMenuItem(title: "Pools: —", action: nil, keyEquivalent: "")
   private let onDemandItem = NSMenuItem(title: "On-demand: —", action: nil, keyEquivalent: "")
   private let creditsItem = NSMenuItem(title: "Credits: —", action: nil, keyEquivalent: "")
-  private let creditsExpireItem = NSMenuItem(title: "Credits expire: —", action: nil, keyEquivalent: "")
   private let slowPoolItem = NSMenuItem(title: "Slow pool: —", action: nil, keyEquivalent: "")
-  private let slowPoolGrantItem = NSMenuItem(title: "Slow pool grant: —", action: nil, keyEquivalent: "")
-  private let slowPoolExpireItem = NSMenuItem(title: "Slow pool expires: —", action: nil, keyEquivalent: "")
-  private let planItem = NSMenuItem(title: "Plan: —", action: nil, keyEquivalent: "")
-  private let cycleItem = NSMenuItem(title: "Cycle: —", action: nil, keyEquivalent: "")
-  private let messageItem = NSMenuItem(title: "—", action: nil, keyEquivalent: "")
+  private let metaItem = NSMenuItem(title: "Plan: —", action: nil, keyEquivalent: "")
   private let errorItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
 
   private override init() {
@@ -56,32 +52,24 @@ final class UsageBarController: NSObject, NSMenuDelegate {
     }
 
     for item in [
-      messageItem, autoItem, apiItem, onDemandItem, creditsItem, creditsExpireItem,
-      slowPoolItem, slowPoolGrantItem, slowPoolExpireItem, planItem, cycleItem, errorItem,
+      messageItem, includedItem, poolsItem, onDemandItem, creditsItem, slowPoolItem, metaItem, errorItem,
     ] {
       item.isEnabled = false
     }
     errorItem.isHidden = true
     creditsItem.isHidden = true
-    creditsExpireItem.isHidden = true
     slowPoolItem.isHidden = true
-    slowPoolGrantItem.isHidden = true
-    slowPoolExpireItem.isHidden = true
 
     menu.delegate = self
     menu.addItem(messageItem)
     menu.addItem(.separator())
-    menu.addItem(autoItem)
-    menu.addItem(apiItem)
+    menu.addItem(includedItem)
+    menu.addItem(poolsItem)
     menu.addItem(onDemandItem)
     menu.addItem(creditsItem)
-    menu.addItem(creditsExpireItem)
     menu.addItem(slowPoolItem)
-    menu.addItem(slowPoolGrantItem)
-    menu.addItem(slowPoolExpireItem)
     menu.addItem(.separator())
-    menu.addItem(planItem)
-    menu.addItem(cycleItem)
+    menu.addItem(metaItem)
     menu.addItem(.separator())
     menu.addItem(errorItem)
 
@@ -175,20 +163,16 @@ final class UsageBarController: NSObject, NSMenuDelegate {
   }
 
   private func apply(_ summary: UsageSummary) {
-    let total = summary.totalPercent
-    // Menu bar: solid pie only. Exact % lives in the menu / tooltip.
-    var tooltip = summary.totalMessage
-    if let slow = summary.slowPool, slow.isActive {
-      tooltip += " · Slow pool"
-      if let delay = slow.delaySeconds {
-        tooltip += " (~\(delay)s)"
-      }
-    }
-    applyStatusImage(StatusArtwork.ring(percent: total), tooltip: tooltip)
+    applyStatusImage(StatusArtwork.ring(percent: summary.totalPercent), tooltip: summary.tooltip)
 
-    messageItem.title = summary.totalMessage
-    autoItem.title = String(format: "Auto / Composer: %.0f%%", summary.autoPercent)
-    apiItem.title = String(format: "API / Other models: %.0f%%", summary.apiPercent)
+    messageItem.title = summary.headline
+    includedItem.title = summary.includedLine
+    poolsItem.title = String(
+      format: "Auto %.0f%% · API %.0f%% · Total %.0f%%",
+      summary.autoPercent,
+      summary.apiPercent,
+      summary.totalPercent
+    )
 
     if summary.onDemandEnabled {
       if let limit = summary.onDemandLimit, limit > 0 {
@@ -209,54 +193,37 @@ final class UsageBarController: NSObject, NSMenuDelegate {
 
     if let credits = summary.credits, credits.hasGrants {
       creditsItem.isHidden = false
-      creditsItem.title = String(
-        format: "Credits: $%.2f / $%.2f remaining",
+      var line = String(
+        format: "Credits: $%.2f / $%.2f",
         Double(credits.remainingCents) / 100.0,
         Double(credits.totalCents) / 100.0
       )
       if let expireText = credits.expireText {
-        creditsExpireItem.isHidden = false
-        creditsExpireItem.title = "Credits expire: \(expireText)"
-      } else {
-        creditsExpireItem.isHidden = true
+        line += " · \(expireText)"
       }
+      creditsItem.title = line
     } else {
       creditsItem.isHidden = true
-      creditsExpireItem.isHidden = true
     }
 
     if let slow = summary.slowPool, slow.isActive {
       slowPoolItem.isHidden = false
-      let modelLabel = slow.autoOnly ? "Auto only" : "limited models"
+      var parts: [String] = [slow.autoOnly ? "Auto only" : "limited models"]
       if let delay = slow.delaySeconds {
-        slowPoolItem.title = "Slow pool: \(modelLabel), ~\(delay)s delay"
-      } else {
-        slowPoolItem.title = "Slow pool: \(modelLabel)"
+        parts.append("~\(delay)s")
       }
-      if let remaining = slow.remainingCents, let totalCents = slow.totalCents, totalCents > 0 {
-        slowPoolGrantItem.isHidden = false
-        slowPoolGrantItem.title = String(
-          format: "Slow pool grant: $%.2f / $%.2f",
-          Double(remaining) / 100.0,
-          Double(totalCents) / 100.0
-        )
-      } else {
-        slowPoolGrantItem.isHidden = true
+      if let remaining = slow.remainingCents, let total = slow.totalCents, total > 0 {
+        parts.append(String(format: "$%.2f / $%.2f", Double(remaining) / 100.0, Double(total) / 100.0))
       }
       if let expireText = slow.expireText {
-        slowPoolExpireItem.isHidden = false
-        slowPoolExpireItem.title = "Slow pool expires: \(expireText)"
-      } else {
-        slowPoolExpireItem.isHidden = true
+        parts.append(expireText)
       }
+      slowPoolItem.title = "Slow pool: " + parts.joined(separator: " · ")
     } else {
       slowPoolItem.isHidden = true
-      slowPoolGrantItem.isHidden = true
-      slowPoolExpireItem.isHidden = true
     }
 
-    planItem.title = "Plan: \(summary.membershipType)"
-    cycleItem.title = "Resets: \(summary.cycleEndText)"
+    metaItem.title = "\(summary.membershipType) · resets \(summary.cycleEndText)"
   }
 }
 
@@ -315,7 +282,6 @@ enum StatusArtwork {
   }
 }
 
-
 struct CreditsInfo {
   var hasGrants: Bool
   var remainingCents: Int
@@ -337,7 +303,9 @@ struct UsageSummary {
   var autoPercent: Double
   var apiPercent: Double
   var totalPercent: Double
-  var totalMessage: String
+  var headline: String
+  var includedLine: String
+  var tooltip: String
   var onDemandEnabled: Bool
   var onDemandUsed: Int
   var onDemandLimit: Int?
@@ -374,34 +342,55 @@ enum UsageFetcher {
   }
 
   private static let usageLimitPolicyGrantType = "usage_limit_policy"
+  private static let emptyBody = Data("{}".utf8)
 
+  /// Two parallel calls:
+  /// 1) `usage-summary` — included $, pool %, on-demand, plan/cycle
+  /// 2) `GetUsageLimitStatusAndActiveGrants` — promo credits + slow-pool policy
   static func fetch() throws -> UsageSummary {
     let token = try readAccessToken()
     let sub = try jwtSubject(token)
     let cookieValue = "\(sub)%3A%3A\(token)"
 
-    let json = try getJSON(
-      url: "https://cursor.com/api/usage-summary",
-      cookie: cookieValue
-    )
+    let pair = try fetchPrimaryAndExtras(token: token, cookie: cookieValue)
+    let json = pair.summary
+    let extras = pair.extras
 
     let membership = (json["membershipType"] as? String) ?? "unknown"
     let individual = json["individualUsage"] as? [String: Any] ?? [:]
     let plan = individual["plan"] as? [String: Any] ?? [:]
     let onDemand = individual["onDemand"] as? [String: Any] ?? [:]
 
-    let auto = (plan["autoPercentUsed"] as? Double)
-      ?? (plan["autoPercentUsed"] as? NSNumber)?.doubleValue
-      ?? 0
-    let api = (plan["apiPercentUsed"] as? Double)
-      ?? (plan["apiPercentUsed"] as? NSNumber)?.doubleValue
-      ?? 0
-    let totalOptional = (plan["totalPercentUsed"] as? Double)
-      ?? (plan["totalPercentUsed"] as? NSNumber)?.doubleValue
-    let totalPercent = totalOptional ?? max(auto, api)
+    let auto = doubleValue(plan["autoPercentUsed"]) ?? 0
+    let api = doubleValue(plan["apiPercentUsed"]) ?? 0
+    let totalPercent = doubleValue(plan["totalPercentUsed"]) ?? max(auto, api)
 
-    let message = (json["autoModelSelectedDisplayMessage"] as? String)
+    let includedUsed = intValue(plan["used"]) ?? 0
+    let includedLimit = intValue(plan["limit"]) ?? 0
+    let includedRemaining = intValue(plan["remaining"])
+      ?? max(includedLimit - includedUsed, 0)
+    let includedExhausted = includedLimit > 0 && includedRemaining <= 0
+
+    let percentMessage = (json["autoModelSelectedDisplayMessage"] as? String)
       ?? String(format: "You've used %.0f%% of your included total usage", totalPercent)
+    let headline = includedExhausted
+      ? "Included limit reached"
+      : percentMessage
+
+    let includedLine: String = {
+      guard includedLimit > 0 else {
+        return String(format: "Included: — · display %.0f%%", totalPercent)
+      }
+      let base = String(
+        format: "Included: $%.2f / $%.2f",
+        Double(includedUsed) / 100.0,
+        Double(includedLimit) / 100.0
+      )
+      if includedExhausted {
+        return base + " · exhausted"
+      }
+      return base + String(format: " · $%.2f left", Double(includedRemaining) / 100.0)
+    }()
 
     let cycleEnd = json["billingCycleEnd"] as? String
     let cycleText: String = {
@@ -411,87 +400,131 @@ enum UsageFetcher {
       return formatDateWithDaysLeft(date)
     }()
 
-    // One RPC covers promo-credit expiry + slow-pool / usage_limit_policy grants.
-    let limitStatus = fetchLimitStatus(token: token)
-    let credits = fetchCredits(cookie: cookieValue, limitStatus: limitStatus)
+    var tooltipParts: [String] = [
+      String(format: "%.0f%%", totalPercent),
+    ]
+    if includedLimit > 0 {
+      tooltipParts.append(
+        String(
+          format: "$%.2f/$%.2f",
+          Double(includedUsed) / 100.0,
+          Double(includedLimit) / 100.0
+        )
+      )
+    }
+    if let slow = extras.slowPool, slow.isActive {
+      if let delay = slow.delaySeconds {
+        tooltipParts.append("Slow pool ~\(delay)s")
+      } else {
+        tooltipParts.append("Slow pool")
+      }
+    }
 
     return UsageSummary(
       membershipType: membership,
       autoPercent: auto,
       apiPercent: api,
       totalPercent: totalPercent,
-      totalMessage: message,
+      headline: headline,
+      includedLine: includedLine,
+      tooltip: tooltipParts.joined(separator: " · "),
       onDemandEnabled: (onDemand["enabled"] as? Bool) ?? false,
-      onDemandUsed: (onDemand["used"] as? Int) ?? 0,
-      onDemandLimit: onDemand["limit"] as? Int,
+      onDemandUsed: intValue(onDemand["used"]) ?? 0,
+      onDemandLimit: intValue(onDemand["limit"]),
       cycleEndText: cycleText,
-      credits: credits,
-      slowPool: limitStatus?.slowPool
+      credits: extras.credits,
+      slowPool: extras.slowPool
     )
   }
 
-  /// Spending-page Credits card: promo/prepaid grants applied to Cursor usage.
-  /// Balance: `POST /api/dashboard/get-credit-grants-balance`
-  /// Expiry: earliest non-policy grant `expiresAtMs` from limit-status RPC
-  private static func fetchCredits(
-    cookie: String,
-    limitStatus: LimitStatusSnapshot?
-  ) -> CreditsInfo? {
-    let balanceJSON: [String: Any]
-    do {
-      balanceJSON = try postJSON(
-        url: "https://cursor.com/api/dashboard/get-credit-grants-balance",
-        cookie: cookie,
-        body: Data("{}".utf8)
-      )
-    } catch {
-      return nil
-    }
-
-    let hasGrants = (balanceJSON["hasCreditGrants"] as? Bool) ?? false
-    let total = intValue(balanceJSON["totalCents"]) ?? 0
-    // Prefer creditBalanceCents; fall back to total − used when the balance field is omitted.
-    let remaining: Int = {
-      if let balance = intValue(balanceJSON["creditBalanceCents"]) { return balance }
-      if let used = intValue(balanceJSON["usedCents"]) { return max(total - used, 0) }
-      return 0
-    }()
-    guard hasGrants, total > 0 || remaining > 0 else {
-      return CreditsInfo(hasGrants: false, remainingCents: 0, totalCents: 0, expireText: nil)
-    }
-
-    return CreditsInfo(
-      hasGrants: true,
-      remainingCents: remaining,
-      totalCents: total,
-      expireText: limitStatus?.promoExpireText
-    )
-  }
-
-  private struct LimitStatusSnapshot {
-    var promoExpireText: String?
+  private struct Extras {
+    var credits: CreditsInfo?
     var slowPool: SlowPoolInfo?
   }
 
-  private static func fetchLimitStatus(token: String) -> LimitStatusSnapshot? {
-    let json: [String: Any]
-    do {
-      json = try postJSON(
-        url: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants",
-        bearer: token,
-        body: Data("{}".utf8),
-        connectRPC: true
-      )
-    } catch {
-      return nil
+  private static func fetchPrimaryAndExtras(
+    token: String,
+    cookie: String
+  ) throws -> (summary: [String: Any], extras: Extras) {
+    let group = DispatchGroup()
+    let lock = NSLock()
+    var summaryBox: Result<[String: Any], Error>?
+    var extrasBox: Result<[String: Any], Error>?
+
+    group.enter()
+    DispatchQueue.global(qos: .utility).async {
+      let result: Result<[String: Any], Error>
+      do {
+        result = .success(try getJSON(
+          url: "https://cursor.com/api/usage-summary",
+          cookie: cookie
+        ))
+      } catch {
+        result = .failure(error)
+      }
+      lock.lock()
+      summaryBox = result
+      lock.unlock()
+      group.leave()
     }
 
+    group.enter()
+    DispatchQueue.global(qos: .utility).async {
+      let result: Result<[String: Any], Error>
+      do {
+        result = .success(try postJSON(
+          url: "https://api2.cursor.sh/aiserver.v1.DashboardService/GetUsageLimitStatusAndActiveGrants",
+          bearer: token,
+          body: emptyBody,
+          connectRPC: true
+        ))
+      } catch {
+        result = .failure(error)
+      }
+      lock.lock()
+      extrasBox = result
+      lock.unlock()
+      group.leave()
+    }
+
+    let waitResult = group.wait(timeout: .now() + 30)
+
+    lock.lock()
+    let summaryResult = summaryBox
+    let extrasResult = extrasBox
+    lock.unlock()
+
+    guard let summaryResult else {
+      // Timed out before usage-summary finished, or worker never reported.
+      throw FetchError.http(waitResult == .timedOut ? -2 : -1)
+    }
+    let summary = try summaryResult.get()
+
+    // Credits / slow-pool are best-effort: keep primary usage even if the RPC lags or fails.
+    let extras: Extras
+    if case .success(let grantsJSON)? = extrasResult {
+      extras = parseExtras(grantsJSON)
+    } else {
+      extras = Extras(credits: nil, slowPool: nil)
+    }
+    return (summary, extras)
+  }
+
+  private static func parseExtras(_ json: [String: Any]) -> Extras {
     let grants = json["activeGrants"] as? [[String: Any]] ?? []
     let policy = json["usageLimitPolicyStatus"] as? [String: Any] ?? [:]
 
-    let promoExpire = earliestExpiryText(
-      in: grants.filter { ($0["grantType"] as? String) != usageLimitPolicyGrantType }
-    )
+    let promoGrants = grants.filter { ($0["grantType"] as? String) != usageLimitPolicyGrantType }
+    let promoRemaining = promoGrants.compactMap { intValue($0["remainingCents"]) }.reduce(0, +)
+    let promoTotal = promoGrants.compactMap { intValue($0["totalCents"]) }.reduce(0, +)
+    let credits: CreditsInfo? = (promoTotal > 0 || promoRemaining > 0)
+      ? CreditsInfo(
+        hasGrants: true,
+        remainingCents: promoRemaining,
+        totalCents: max(promoTotal, promoRemaining),
+        expireText: earliestExpiryText(in: promoGrants)
+      )
+      : nil
 
     let policyGrants = grants.filter { ($0["grantType"] as? String) == usageLimitPolicyGrantType }
     let policyGrant = policyGrants.first
@@ -508,7 +541,6 @@ enum UsageFetcher {
 
     let allowedModels = (policy["allowedModelIds"] as? [String])
       ?? (policyGrant?["allowedModelIds"] as? [String])
-    // Observed slow-pool grants lock to Auto (`default`); keep label honest if that changes.
     let autoOnly = allowedModels == nil
       || allowedModels == ["default"]
       || (allowedModels?.allSatisfy { $0 == "default" } ?? false)
@@ -527,7 +559,7 @@ enum UsageFetcher {
       )
       : nil
 
-    return LimitStatusSnapshot(promoExpireText: promoExpire, slowPool: slowPool)
+    return Extras(credits: credits, slowPool: slowPool)
   }
 
   private static func earliestExpiryText(in grants: [[String: Any]]) -> String? {
@@ -559,6 +591,15 @@ enum UsageFetcher {
     case let v as Int: return v
     case let v as NSNumber: return v.intValue
     case let v as String: return Int(v)
+    default: return nil
+    }
+  }
+
+  private static func doubleValue(_ raw: Any?) -> Double? {
+    switch raw {
+    case let v as Double: return v
+    case let v as NSNumber: return v.doubleValue
+    case let v as String: return Double(v)
     default: return nil
     }
   }
