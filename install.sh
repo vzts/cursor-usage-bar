@@ -21,6 +21,7 @@ swiftc -O "${ROOT}/scripts/verify-session-db-open.swift" -o "${VERIFY_BIN}"
 echo "Installing to ${APP}…"
 mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "$BIN" "${APP}/Contents/MacOS/${BIN_NAME}"
+cp "${ROOT}/assets/AppIcon.icns" "${APP}/Contents/Resources/AppIcon.icns"
 
 cat > "${APP}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -33,6 +34,8 @@ cat > "${APP}/Contents/Info.plist" <<PLIST
   <string>local.cursorusagebar</string>
   <key>CFBundleName</key>
   <string>${BIN_NAME}</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
